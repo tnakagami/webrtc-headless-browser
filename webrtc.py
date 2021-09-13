@@ -31,6 +31,7 @@ class WebRTC(threading.Thread):
         chrome_option = webdriver.ChromeOptions()
         chrome_option.add_argument('--headless')
         chrome_option.add_argument('--disable-gpu')
+        chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
         self.max_wait_sec = max_wait_sec
         self.driver = webdriver.Chrome(options=chrome_option)
         self.event = threading.Event()
@@ -49,18 +50,15 @@ class WebRTC(threading.Thread):
         login_url = '{}/index.php'.format(base_url)
         self.driver.get(login_url)
         time.sleep(wait_time_sec)
-        self.driver.save_screenshot('/home/pi/ss01.png')
         # enter username and password
         username_field = self.driver.find_element_by_name('username')
         username_field.send_keys(os.getenv('WEBRTC_USERNAME'))
         password_field = self.driver.find_element_by_name('password')
         password_field.send_keys(os.getenv('WEBRTC_PASSWORD'))
-        self.driver.save_screenshot('/home/pi/ss02.png')
         # login process
         login_btn = self.driver.find_element_by_id('btn-login')
         login_btn.click()
         time.sleep(wait_time_sec * 2)
-        self.driver.save_screenshot('/home/pi/ss03.png')
         # access dashboard
         access_url = '{}/index.php?display=dashboard'.format(base_url)
         while self.process_status.get_status():
@@ -121,6 +119,7 @@ if __name__ == '__main__':
     # main loop
     while process_status.get_status():
         time.sleep(3)
+
     # finalization
     webrtc.is_event_set()
     webrtc.join()
