@@ -6,18 +6,42 @@ import os
 from selenium import webdriver
 
 class WebRTC(threading.Thread):
-    def __init__(self, process_status):
+    """
+    Web Real-Time Communication
+
+    Attributes
+    ----------
+    process_status : ProcessStatus
+        instance of ProcessStatus
+    driver : webdriver
+    event : threading.Event
+    """
+
+    def __init__(self, process_status, max_wait_sec=3600):
+        """
+        constructor
+
+        Parameters
+        ----------
+        process_status : ProcessStatus
+            instance of ProcessStatus
+        """
         super().__init__()
         self.process_status = process_status
         chrome_option = webdriver.ChromeOptions()
         chrome_option.add_argument('--headless')
         chrome_option.add_argument('--disable-gpu')
+        self.max_wait_sec = max_wait_sec
         self.driver = webdriver.Chrome(options=chrome_option)
+        self.event = threading.Event()
 
-    def __del__(self):
-        self.driver.quit()
+    def is_event_set(self):
+        self.event.set()
 
     def run(self):
+        """
+        thread function
+        """
         base_url = os.getenv('WEBRTC_BASE_URL')
         wait_time_sec = 5
 
@@ -43,55 +67,60 @@ class WebRTC(threading.Thread):
             self.driver.get(access_url)
             soup = bs4.BeautifulSoup(self.driver.page_source, 'html.parser')
             print(soup.h3)
-            time.sleep(60)
-        self.driver.close()
+            self.event.wait(self.max_wait_sec)
+            self.event.clear()
+
+        self.driver.quit()
 
 class ProcessStatus():
     """
-    プロセスの状態
+    Process Status
+
     Attributes
     ----------
     __status : bool
-        True  : 実行中
-        False : 停止中
+        True  : running
+        False : stopped
     """
 
     def __init__(self):
         """
-        コンストラクタ
+        constructor
         """
         self.__status = True
 
     def change_status(self, signum, frame):
         """
-        ステータスの変更
+        change status
+
         Parameters
         ----------
         signum : int
-            シグナル番号
+            signal number
         frame : str
-            フレーム情報
+            frame information
         """
         self.__status = False
 
     def get_status(self):
         """
-        現在のステータスの取得
+        get current status
         """
         return self.__status
 
 if __name__ == '__main__':
-    # ================================
-    # プロセス監視用インスタンスの生成
-    # ================================
     process_status = ProcessStatus()
     signal.signal(signal.SIGINT, process_status.change_status)
     signal.signal(signal.SIGTERM, process_status.change_status)
 
-    webrtc = WebRTC(process_status)
+    # initialization
+    max_wait_sec = 60 * 60
+    webrtc = WebRTC(process_status, max_wait_sec=max_wait_sec)
     webrtc.start()
 
+    # main loop
     while process_status.get_status():
         time.sleep(3)
-
+    # finalization
+    webrtc.is_event_set()
     webrtc.join()
