@@ -50,7 +50,7 @@ class WebRTC(threading.Thread):
         thread function
         """
         base_url = os.getenv('WEBRTC_BASE_URL')
-        wait_time_sec = 5
+        wait_time_sec = 3
 
         # access login page
         login_url = '{}/index.php'.format(base_url)
@@ -64,7 +64,7 @@ class WebRTC(threading.Thread):
         # login process
         login_btn = self.driver.find_element_by_id('btn-login')
         login_btn.click()
-        time.sleep(wait_time_sec * 2)
+        time.sleep(wait_time_sec)
 
         # access dashboard
         access_url = '{}/index.php?display=dashboard'.format(base_url)
