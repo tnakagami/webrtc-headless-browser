@@ -25,6 +25,9 @@ class WebRTC(threading.Thread):
         ----------
         process_status : ProcessStatus
             instance of ProcessStatus
+        max_wait_sec : int
+            waiting time for repeating url access
+            default: 3600 [sec]
         """
         super().__init__()
         self.process_status = process_status
@@ -37,6 +40,9 @@ class WebRTC(threading.Thread):
         self.event = threading.Event()
 
     def is_event_set(self):
+        """
+        set event status
+        """
         self.event.set()
 
     def run(self):
@@ -44,7 +50,7 @@ class WebRTC(threading.Thread):
         thread function
         """
         base_url = os.getenv('WEBRTC_BASE_URL')
-        wait_time_sec = 5
+        wait_time_sec = 3
 
         # access login page
         login_url = '{}/index.php'.format(base_url)
@@ -58,7 +64,8 @@ class WebRTC(threading.Thread):
         # login process
         login_btn = self.driver.find_element_by_id('btn-login')
         login_btn.click()
-        time.sleep(wait_time_sec * 2)
+        time.sleep(wait_time_sec)
+
         # access dashboard
         access_url = '{}/index.php?display=dashboard'.format(base_url)
         while self.process_status.get_status():
