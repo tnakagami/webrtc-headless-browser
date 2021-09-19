@@ -102,7 +102,7 @@ class WebRTC:
         while self.status:
             driver.get(access_url)
             soup = bs4.BeautifulSoup(driver.page_source, 'html.parser')
-            if soup.h3 is None or soup.h3.text.trim() != 'Welcome {}'.format(username):
+            if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
                 self.__run_login_process(**kwargs)
             else:
                 self.logger.info('{}: {}'.format(username, soup.h3.text))
