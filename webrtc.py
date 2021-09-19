@@ -5,8 +5,9 @@ import threading
 import os
 import logging
 import logging.config
-import daemon
 from selenium import webdriver
+from daemon import DaemonContext
+from lockfile.pidlockfile import PIDLockFile
 
 class WebRTC:
     """
@@ -32,7 +33,6 @@ class WebRTC:
             waiting time for repeating url access
             default: 3600 [sec]
         """
-        super().__init__()
         self.status= True
         self.logger = logging.getLogger(config_name)
         self.max_wait_sec = max_wait_sec
@@ -49,6 +49,7 @@ class WebRTC:
         """
         thread function
         """
+        self.logger.info('== Start ===')
         base_url = os.getenv('WEBRTC_BASE_URL')
         wait_time_sec = 3
         # setup driver
@@ -82,6 +83,7 @@ class WebRTC:
             self.event.clear()
 
         driver.quit()
+        self.logger.info('== Stop ===')
 
 class ProcessStatus():
     """
@@ -149,21 +151,23 @@ if __name__ == '__main__':
         }
     })
     process_status = ProcessStatus()
-    signal.signal(signal.SIGINT, process_status.change_status)
-    signal.signal(signal.SIGTERM, process_status.change_status)
-    pidfile = daemon.pidfile.PIDLockFile('/var/run/webrtc.pid')
+    signal_map = {
+        signal.SIGINT: process_status.change_status,
+        signal.SIGTERM: process_status.change_status
+    }
+    # setup webrtc
+    max_wait_sec = 60 * 60
+    webrtc = WebRTC('webrtc', max_wait_sec=max_wait_sec)
+    pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
 
-    if not pidfile.is_locked():
-        with daemon.DaemonContext(working_directory=os.getcwd(), pidfile=pidfile):
-            max_wait_sec = 60 * 60
-            webrtc = WebRTC('webrtc', max_wait_sec=max_wait_sec)
-            thread = threading.Thread(target=webrtc.execute, args=(os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'),))
-            thread.start()
+    with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.logger.handlers[0].stream]):
+        thread = threading.Thread(target=webrtc.execute, args=(os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'),))
+        thread.start()
 
-            # main loop
-            while process_status.get_status():
-                time.sleep(3)
+        # main loop
+        while process_status.get_status():
+            time.sleep(3)
 
-            # finalization
-            webrtc.update_status()
-            thread.join()
+        # finalization
+        webrtc.update_status()
+        thread.join()
