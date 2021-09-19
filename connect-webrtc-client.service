@@ -1,5 +1,5 @@
 [Unit]
-Description = WebRTC Client
+Description = Connection of WebRTC Client with browser
 After = network.target
 
 [Service]
