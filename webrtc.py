@@ -81,7 +81,9 @@ class WebRTC:
         """
         thread function
         """
-        self.logger.info('== Start ===')
+        self.logger.info('=================')
+        self.logger.info('===== Start =====')
+        self.logger.info('=================')
         base_url = os.getenv('WEBRTC_BASE_URL')
         # setup driver
         chrome_option = webdriver.ChromeOptions()
@@ -105,12 +107,14 @@ class WebRTC:
             if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
                 self.__run_login_process(**kwargs)
             else:
-                self.logger.info('{}: {}'.format(username, soup.h3.text))
+                self.logger.info('{}'.format(soup.h3.text))
             self.event.wait(self.max_wait_sec)
             self.event.clear()
 
         driver.quit()
-        self.logger.info('== Stop ===')
+        self.logger.info('=================')
+        self.logger.info('=====  Stop =====')
+        self.logger.info('=================')
 
 class ProcessStatus():
     """
