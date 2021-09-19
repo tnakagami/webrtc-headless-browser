@@ -22,8 +22,6 @@ class WebRTC(threading.Thread):
 
         Parameters
         ----------
-        process_status : ProcessStatus
-            instance of ProcessStatus
         max_wait_sec : int
             waiting time for repeating url access
             default: 3600 [sec]
