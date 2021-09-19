@@ -45,20 +45,23 @@ class WebRTC:
         self.status = False
         self.event.set()
 
-    def execute(self, username, password):
+    def __run_login_process(self, username, password, base_url, driver):
         """
-        thread function
-        """
-        self.logger.info('== Start ===')
-        base_url = os.getenv('WEBRTC_BASE_URL')
-        wait_time_sec = 3
-        # setup driver
-        chrome_option = webdriver.ChromeOptions()
-        chrome_option.add_argument('--headless')
-        chrome_option.add_argument('--disable-gpu')
-        chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
-        driver = webdriver.Chrome(options=chrome_option)
+        run login process
 
+        Parameters
+        ----------
+        username : str
+            login username
+        password : str
+            login password
+        base_url : str
+            base url
+        driver : webdriver
+            instance of webdriver
+        """
+        self.logger.info('[start] login process')
+        wait_time_sec = 3
         # access login page
         login_url = '{}/index.php'.format(base_url)
         driver.get(login_url)
@@ -72,13 +75,37 @@ class WebRTC:
         login_btn = driver.find_element_by_id('btn-login')
         login_btn.click()
         time.sleep(wait_time_sec)
+        self.logger.info('[ end ] login process')
+
+    def execute(self, username, password):
+        """
+        thread function
+        """
+        self.logger.info('== Start ===')
+        base_url = os.getenv('WEBRTC_BASE_URL')
+        # setup driver
+        chrome_option = webdriver.ChromeOptions()
+        chrome_option.add_argument('--headless')
+        chrome_option.add_argument('--disable-gpu')
+        chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
+        driver = webdriver.Chrome(options=chrome_option)
+        kwargs = {
+            'username': username,
+            'password': password,
+            'base_url': base_url,
+            'driver': driver,
+        }
+        self.__run_login_process(**kwargs)
 
         # access dashboard
         access_url = '{}/index.php?display=dashboard'.format(base_url)
         while self.status:
             driver.get(access_url)
             soup = bs4.BeautifulSoup(driver.page_source, 'html.parser')
-            self.logger.info('{}: {}'.format(username, soup.h3.text))
+            if soup.h3 is None or soup.h3.text.trim() != 'Welcome {}'.format(username):
+                self.__run_login_process(**kwargs)
+            else:
+                self.logger.info('{}: {}'.format(username, soup.h3.text))
             self.event.wait(self.max_wait_sec)
             self.event.clear()
 
