@@ -3,6 +3,7 @@ import logging
 import logging.config
 import os
 import signal
+import sys
 import threading
 import time
 from daemon import DaemonContext
@@ -44,10 +45,6 @@ class WebRTC:
         self.__max_wait_sec = 0
         # setup event
         self.__event = threading.Event()
-
-    def __flush(self):
-        for handler in self.__logger.handlers:
-            handler.flush()
 
     def initialize(self, max_wait_sec=3600):
         """
@@ -105,9 +102,14 @@ class WebRTC:
         """
         self.__logger.info('[start] login process')
         wait_time_sec = 3
-        # access login page
-        self.__driver.get('{}/index.php'.format(base_url))
-        time.sleep(wait_time_sec)
+        try:
+            # access login page
+            login_url = '{}/index.php'.format(base_url)
+            self.__driver.get(login_url)
+            time.sleep(wait_time_sec)
+        except Exception as e:
+            _, _, exc_tb = sys.exc_info()
+            self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
         # enter username and password
         username_field = self.__driver.find_element_by_name('username')
         username_field.send_keys(username)
@@ -130,18 +132,21 @@ class WebRTC:
             'base_url': base_url,
         }
         self.__run_login_process(**kwargs)
-        self.__flush()
 
-        # access dashboard
         while self.__status:
-            self.__driver.get('{}/index.php?display=dashboard'.format(base_url))
-            soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
-            # check login status
-            if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
-                self.__run_login_process(**kwargs)
-            else:
-                self.__logger.info('{}'.format(soup.h3.text))
-                self.__flush()
+            try:
+                # access dashboard
+                self.__driver.get('{}/index.php?display=dashboard'.format(base_url))
+                soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
+                # check login status
+                if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
+                    self.__run_login_process(**kwargs)
+                else:
+                    self.__logger.info('{}'.format(soup.h3.text))
+            except Exception as e:
+                _, _, exc_tb = sys.exc_info()
+                self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
+            # wait for next access...
             self.__event.wait(self.__max_wait_sec)
             self.__event.clear()
 
