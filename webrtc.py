@@ -135,7 +135,7 @@ class WebRTC:
             if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
                 self.__run_login_process(**kwargs)
             else:
-                self.__logger.info('{}'.format(soup.h3.text.strip()))
+                self.__logger.info('{}'.format(soup.h3.text))
             self.__event.wait(self.__max_wait_sec)
             self.__event.clear()
 
