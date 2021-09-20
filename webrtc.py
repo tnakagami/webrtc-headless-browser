@@ -40,10 +40,14 @@ class WebRTC:
         # setup logger
         self.__logger = logging.getLogger(config_name)
         # setup status and max wait sec
-        self.__status= False
+        self.__status = False
         self.__max_wait_sec = 0
         # setup event
         self.__event = threading.Event()
+
+    def __flush(self):
+        for handler in self.__logger.handlers:
+            handler.flush()
 
     def initialize(self, max_wait_sec=3600):
         """
@@ -55,7 +59,7 @@ class WebRTC:
             waiting time for repeating url access
             default: 3600 [sec]
         """
-        self.__status= True
+        self.__status = True
         self.__max_wait_sec = max_wait_sec
         # output message
         self.__logger.info('=================')
@@ -126,6 +130,7 @@ class WebRTC:
             'base_url': base_url,
         }
         self.__run_login_process(**kwargs)
+        self.__flush()
 
         # access dashboard
         while self.__status:
@@ -136,6 +141,7 @@ class WebRTC:
                 self.__run_login_process(**kwargs)
             else:
                 self.__logger.info('{}'.format(soup.h3.text))
+                self.__flush()
             self.__event.wait(self.__max_wait_sec)
             self.__event.clear()
 
