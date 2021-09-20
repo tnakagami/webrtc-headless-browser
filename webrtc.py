@@ -22,7 +22,7 @@ class WebRTC:
     __event : threading.Event
     """
 
-    def __init__(self, config_name, max_wait_sec=3600):
+    def __init__(self, config_name):
         """
         constructor
 
@@ -30,9 +30,6 @@ class WebRTC:
         ----------
         config_name : str
             config name of logging
-        max_wait_sec : int
-            waiting time for repeating url access
-            default: 3600 [sec]
         """
         # setup driver
         chrome_option = webdriver.ChromeOptions()
@@ -43,10 +40,23 @@ class WebRTC:
         # setup logger
         self.__logger = logging.getLogger(config_name)
         # setup status and max wait sec
-        self.__status= True
-        self.__max_wait_sec = max_wait_sec
+        self.__status= False
+        self.__max_wait_sec = 0
         # setup event
         self.__event = threading.Event()
+
+    def initialize(self, max_wait_sec=3600):
+        """
+        initialize
+
+        Parameters
+        ----------
+        max_wait_sec : int
+            waiting time for repeating url access
+            default: 3600 [sec]
+        """
+        self.__status= True
+        self.__max_wait_sec = max_wait_sec
         # output message
         self.__logger.info('=================')
         self.__logger.info('===== Start =====')
@@ -63,8 +73,8 @@ class WebRTC:
         update status
         """
         self.__status = False
-        self.__event.set()
         self.__max_wait_sec = 0
+        self.__event.set()
 
     def finalize(self):
         """
@@ -202,8 +212,9 @@ if __name__ == '__main__':
     }
     # setup webrtc
     max_wait_sec = 60 * 60 - 7
-    webrtc = WebRTC('webrtc', max_wait_sec=max_wait_sec)
+    webrtc = WebRTC('webrtc')
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
+    webrtc.initialize(max_wait_sec)
 
     with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.get_stream()]):
         thread = threading.Thread(target=webrtc.execute, args=(os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'),))
