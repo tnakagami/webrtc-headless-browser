@@ -1,13 +1,13 @@
 import bs4
-import time
-import signal
-import threading
-import os
 import logging
 import logging.config
-from selenium import webdriver
+import os
+import signal
+import threading
+import time
 from daemon import DaemonContext
 from lockfile.pidlockfile import PIDLockFile
+from selenium import webdriver
 
 class WebRTC:
     """
@@ -118,9 +118,8 @@ class WebRTC:
         self.__run_login_process(**kwargs)
 
         # access dashboard
-        access_url = '{}/index.php?display=dashboard'.format(base_url)
         while self.__status:
-            self.__driver.get(access_url)
+            self.__driver.get('{}/index.php?display=dashboard'.format(base_url))
             soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
             # check login status
             if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
@@ -202,7 +201,7 @@ if __name__ == '__main__':
         signal.SIGTERM: process_status.change_status
     }
     # setup webrtc
-    max_wait_sec = 60 * 60
+    max_wait_sec = 60 * 60 - 7
     webrtc = WebRTC('webrtc', max_wait_sec=max_wait_sec)
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
 
