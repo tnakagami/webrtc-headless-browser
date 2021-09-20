@@ -100,26 +100,26 @@ class WebRTC:
         base_url : str
             base url
         """
-        self.__logger.info('[start] login process')
-        wait_time_sec = 3
         try:
+            self.__logger.info('[start] login process')
+            wait_time_sec = 3
             # access login page
             login_url = '{}/index.php'.format(base_url)
             self.__driver.get(login_url)
             time.sleep(wait_time_sec)
+            # enter username and password
+            username_field = self.__driver.find_element_by_name('username')
+            username_field.send_keys(username)
+            password_field = self.__driver.find_element_by_name('password')
+            password_field.send_keys(password)
+            # login process
+            login_btn = self.__driver.find_element_by_id('btn-login')
+            login_btn.click()
+            time.sleep(wait_time_sec)
+            self.__logger.info('[ end ] login process')
         except Exception as e:
             _, _, exc_tb = sys.exc_info()
             self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
-        # enter username and password
-        username_field = self.__driver.find_element_by_name('username')
-        username_field.send_keys(username)
-        password_field = self.__driver.find_element_by_name('password')
-        password_field.send_keys(password)
-        # login process
-        login_btn = self.__driver.find_element_by_id('btn-login')
-        login_btn.click()
-        time.sleep(wait_time_sec)
-        self.__logger.info('[ end ] login process')
 
     def execute(self, username, password):
         """
