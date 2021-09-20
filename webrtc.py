@@ -15,10 +15,11 @@ class WebRTC:
 
     Attributes
     ----------
-    status : boolean
-    logger : logging.logger
-    max_wait_sec : int
-    event : threading.Event
+    __driver : webdriver
+    __logger : logging.logger
+    __status : boolean
+    __max_wait_sec : int
+    __event : threading.Event
     """
 
     def __init__(self, config_name, max_wait_sec=3600):
@@ -33,19 +34,49 @@ class WebRTC:
             waiting time for repeating url access
             default: 3600 [sec]
         """
-        self.status= True
-        self.logger = logging.getLogger(config_name)
-        self.max_wait_sec = max_wait_sec
-        self.event = threading.Event()
+        # setup driver
+        chrome_option = webdriver.ChromeOptions()
+        chrome_option.add_argument('--headless')
+        chrome_option.add_argument('--disable-gpu')
+        chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
+        self.__driver = webdriver.Chrome(options=chrome_option)
+        # setup logger
+        self.__logger = logging.getLogger(config_name)
+        # setup status and max wait sec
+        self.__status= True
+        self.__max_wait_sec = max_wait_sec
+        # setup event
+        self.__event = threading.Event()
+        # output message
+        self.__logger.info('=================')
+        self.__logger.info('===== Start =====')
+        self.__logger.info('=================')
+
+    def get_stream(self):
+        """
+        get stream of logger
+        """
+        return self.__logger.handlers[0].stream
 
     def update_status(self):
         """
         update status
         """
-        self.status = False
-        self.event.set()
+        self.__status = False
+        self.__event.set()
+        self.__max_wait_sec = 0
 
-    def __run_login_process(self, username, password, base_url, driver):
+    def finalize(self):
+        """
+        finalize
+        """
+        self.__driver.quit()
+        # output message
+        self.__logger.info('=================')
+        self.__logger.info('=====  Stop =====')
+        self.__logger.info('=================')
+
+    def __run_login_process(self, username, password, base_url):
         """
         run login process
 
@@ -57,64 +88,47 @@ class WebRTC:
             login password
         base_url : str
             base url
-        driver : webdriver
-            instance of webdriver
         """
-        self.logger.info('[start] login process')
+        self.__logger.info('[start] login process')
         wait_time_sec = 3
         # access login page
-        login_url = '{}/index.php'.format(base_url)
-        driver.get(login_url)
+        self.__driver.get('{}/index.php'.format(base_url))
         time.sleep(wait_time_sec)
         # enter username and password
-        username_field = driver.find_element_by_name('username')
+        username_field = self.__driver.find_element_by_name('username')
         username_field.send_keys(username)
-        password_field = driver.find_element_by_name('password')
+        password_field = self.__driver.find_element_by_name('password')
         password_field.send_keys(password)
         # login process
-        login_btn = driver.find_element_by_id('btn-login')
+        login_btn = self.__driver.find_element_by_id('btn-login')
         login_btn.click()
         time.sleep(wait_time_sec)
-        self.logger.info('[ end ] login process')
+        self.__logger.info('[ end ] login process')
 
     def execute(self, username, password):
         """
         thread function
         """
-        self.logger.info('=================')
-        self.logger.info('===== Start =====')
-        self.logger.info('=================')
         base_url = os.getenv('WEBRTC_BASE_URL')
-        # setup driver
-        chrome_option = webdriver.ChromeOptions()
-        chrome_option.add_argument('--headless')
-        chrome_option.add_argument('--disable-gpu')
-        chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
-        driver = webdriver.Chrome(options=chrome_option)
         kwargs = {
             'username': username,
             'password': password,
             'base_url': base_url,
-            'driver': driver,
         }
         self.__run_login_process(**kwargs)
 
         # access dashboard
         access_url = '{}/index.php?display=dashboard'.format(base_url)
-        while self.status:
-            driver.get(access_url)
-            soup = bs4.BeautifulSoup(driver.page_source, 'html.parser')
+        while self.__status:
+            self.__driver.get(access_url)
+            soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
+            # check login status
             if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
                 self.__run_login_process(**kwargs)
             else:
-                self.logger.info('{}'.format(soup.h3.text))
-            self.event.wait(self.max_wait_sec)
-            self.event.clear()
-
-        driver.quit()
-        self.logger.info('=================')
-        self.logger.info('=====  Stop =====')
-        self.logger.info('=================')
+                self.__logger.info('{}'.format(soup.h3.text.strip()))
+            self.__event.wait(self.__max_wait_sec)
+            self.__event.clear()
 
 class ProcessStatus():
     """
@@ -151,7 +165,7 @@ class ProcessStatus():
         return self.__status
 
 if __name__ == '__main__':
-    # initialization
+    # setup logging configuration
     logging.config.dictConfig({
         'version': 1,
         'disable_existing_loggers': False,
@@ -181,6 +195,7 @@ if __name__ == '__main__':
             }
         }
     })
+    # initialization
     process_status = ProcessStatus()
     signal_map = {
         signal.SIGINT: process_status.change_status,
@@ -191,7 +206,7 @@ if __name__ == '__main__':
     webrtc = WebRTC('webrtc', max_wait_sec=max_wait_sec)
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
 
-    with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.logger.handlers[0].stream]):
+    with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.get_stream()]):
         thread = threading.Thread(target=webrtc.execute, args=(os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'),))
         thread.start()
 
@@ -199,6 +214,8 @@ if __name__ == '__main__':
         while process_status.get_status():
             time.sleep(3)
 
-        # finalization
         webrtc.update_status()
         thread.join()
+
+    # finalization
+    webrtc.finalize()
