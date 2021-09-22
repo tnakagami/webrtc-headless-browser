@@ -142,7 +142,7 @@ class WebRTC:
                 if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(username):
                     self.__run_login_process(**kwargs)
                 else:
-                    self.__logger.info('{}'.format(soup.h3.text))
+                    self.__logger.info('{}'.format(soup.h3.text.strip()))
                 # wait for next access...
                 self.__event.wait(self.__max_wait_sec)
                 self.__event.clear()
@@ -227,7 +227,7 @@ if __name__ == '__main__':
         signal.SIGTERM: process_status.change_status
     }
     # setup webrtc
-    max_wait_sec = 60 * 60 - 7
+    max_wait_sec = 60 * 60 - 5
     webrtc = WebRTC('webrtc')
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
     webrtc.initialize(max_wait_sec)
