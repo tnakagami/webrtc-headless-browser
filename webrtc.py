@@ -63,6 +63,16 @@ class WebRTC:
         self.__logger.info('===== Start =====')
         self.__logger.info('=================')
 
+    def finalize(self):
+        """
+        finalize
+        """
+        self.__driver.quit()
+        # output message
+        self.__logger.info('=================')
+        self.__logger.info('=====  Stop =====')
+        self.__logger.info('=================')
+
     def get_stream(self):
         """
         get stream of logger
@@ -76,16 +86,6 @@ class WebRTC:
         self.__status = False
         self.__max_wait_sec = 0
         self.__event.set()
-
-    def finalize(self):
-        """
-        finalize
-        """
-        self.__driver.quit()
-        # output message
-        self.__logger.info('=================')
-        self.__logger.info('=====  Stop =====')
-        self.__logger.info('=================')
 
     def __run_login_process(self, username, password, base_url):
         """
@@ -143,12 +143,17 @@ class WebRTC:
                     self.__run_login_process(**kwargs)
                 else:
                     self.__logger.info('{}'.format(soup.h3.text))
+                # wait for next access...
+                self.__event.wait(self.__max_wait_sec)
+                self.__event.clear()
             except Exception as e:
+                wait_time_sec = 3
                 _, _, exc_tb = sys.exc_info()
                 self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
-            # wait for next access...
-            self.__event.wait(self.__max_wait_sec)
-            self.__event.clear()
+                self.__logger.warn('retry after waiting for {} seconds'.format(wait_time_sec))
+                # retry after several seconds
+                self.__event.wait(wait_time_sec)
+                self.__event.clear()
 
 class ProcessStatus():
     """
