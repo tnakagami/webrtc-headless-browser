@@ -7,7 +7,6 @@ Type=simple
 Restart=always
 User=pi
 Group=pi
-ExecStartPre=/bin/bash -c '/usr/bin/echo -n > /var/log/webrtc/status.log'
 WorkingDirectory=/home/pi/webrtc-headless-browser
 ExecStart=/home/pi/.local/bin/pipenv run start  # pipenv run which pipenv -> /home/pi/.local/bin/pipenv
 
