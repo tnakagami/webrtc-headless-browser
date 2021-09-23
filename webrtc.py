@@ -2,9 +2,11 @@ import bs4
 import logging
 import logging.config
 import os
+import queue
 import schedule
 import signal
 import sys
+import threading
 import time
 from daemon import DaemonContext
 from lockfile.pidlockfile import PIDLockFile
@@ -119,6 +121,48 @@ class WebRTC:
                 # retry after several seconds
                 time.sleep(wait_time_sec)
 
+class JobWorker(threading.Thread):
+    """
+    Job Worker
+
+    Attributes
+    ----------
+    __queue : queue.Queue
+    __is_running : boolean
+    """
+
+    def __init__(self):
+        """
+        constructor
+        """
+        super().__init__()
+        self.__queue = queue.Queue()
+        self.__is_running = True
+
+    def put(self, job):
+        """
+        put job
+        """
+        self.__queue.put(job)
+
+    def finish(self):
+        """
+        finish job worker
+        """
+        self.__is_running = False
+
+    def run(self):
+        """
+        thread function
+        """
+        while self.__is_running:
+            try:
+                job = self.__queue.get(block=True, timeout=1)
+                job()
+                self.__queue.task_done()
+            except queue.Empty:
+                pass
+
 class ProcessStatus():
     """
     Process Status
@@ -194,16 +238,24 @@ if __name__ == '__main__':
     webrtc = WebRTC('webrtc', os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'))
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
     webrtc.initialize()
+    job_worker = JobWorker()
 
     with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.get_stream()]):
         # setup schedule
-        schedule.every().day.at('0:03').do(webrtc.job)
-        # first execution
-        webrtc.job()
+        job_worker.put(webrtc.job)
+        schedule.every().day.at('00:03').do(job_worker.put, webrtc.job)
+        job_worker.start()
+
         # main loop
         while process_status.get_status():
             schedule.run_pending()
             time.sleep(1)
+
+        # clear schedule
+        schedule.clear()
+        # finish job worker
+        job_worker.finish()
+        job_worker.join()
 
     # finalization
     webrtc.finalize()
