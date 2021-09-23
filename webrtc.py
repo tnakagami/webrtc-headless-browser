@@ -249,7 +249,7 @@ if __name__ == '__main__':
         # main loop
         while process_status.get_status():
             schedule.run_pending()
-            time.sleep(1)
+            time.sleep(0.1)
 
         # clear schedule
         schedule.clear()
