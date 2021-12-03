@@ -94,30 +94,34 @@ class WebRTC:
             self.__logger.info('[ end ] login process')
         except Exception as e:
             _, _, exc_tb = sys.exc_info()
-            self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
+            self.__logger.warning('{} (line: {})'.format(e, exc_tb.tb_lineno))
 
-    def job(self):
+    def chk_login_status(self):
         """
-        thread function
+        check login status
         """
         is_running = True
 
         while is_running:
             try:
                 # access dashboard
-                self.__driver.get('{}/index.php?display=dashboard'.format(self.__base_url))
+                access_url = '{}/index.php?display=dashboard'.format(self.__base_url)
+                self.__driver.get(access_url)
                 soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
                 # check login status
                 if soup.h3 is None or soup.h3.text.strip() != 'Welcome {}'.format(self.__username):
                     self.__run_login_process()
+                    self.__driver.get(access_url)
                 else:
                     self.__logger.info('{}'.format(soup.h3.text.strip()))
+                # enable phone widget
+                self.__driver.find_element_by_xpath("//a[@data-widget_type_id='phone' and @data-name='Phone']").click()
                 is_running = False
             except Exception as e:
                 wait_time_sec = 3
                 _, _, exc_tb = sys.exc_info()
-                self.__logger.warn('{} (line: {})'.format(e, exc_tb.tb_lineno))
-                self.__logger.warn('retry after waiting for {} seconds'.format(wait_time_sec))
+                self.__logger.warning('{} (line: {})'.format(e, exc_tb.tb_lineno))
+                self.__logger.warning('retry after waiting for {} seconds'.format(wait_time_sec))
                 # retry after several seconds
                 time.sleep(wait_time_sec)
 
@@ -242,8 +246,8 @@ if __name__ == '__main__':
 
     with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.get_stream()]):
         # setup schedule
-        job_worker.put(webrtc.job)
-        schedule.every().day.at('00:03').do(job_worker.put, webrtc.job)
+        job_worker.put(webrtc.chk_login_status)
+        schedule.every().day.at('00:03').do(job_worker.put, webrtc.chk_login_status)
         job_worker.start()
 
         # main loop
