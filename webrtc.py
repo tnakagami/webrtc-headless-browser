@@ -3,19 +3,53 @@ import logging
 import logging.config
 import os
 import queue
+import re
 import schedule
 import signal
 import sys
 import threading
 import time
-import re
 from daemon import DaemonContext
 from lockfile.pidlockfile import PIDLockFile
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+class ProcessStatus():
+    """
+    Process Status
+    Attributes
+    ----------
+    __status : bool
+        True  : running
+        False : stopped
+    """
+
+    def __init__(self):
+        """
+        constructor
+        """
+        self.__status = True
+
+    def change_status(self, signum, frame):
+        """
+        change status
+        Parameters
+        ----------
+        signum : int
+            signal number
+        frame : str
+            frame information
+        """
+        self.__status = False
+
+    def get_status(self):
+        """
+        get current status
+        """
+        return self.__status
 
 class WebRTC:
     """
@@ -28,12 +62,11 @@ class WebRTC:
     __base_url : str
     __username : str
     __password : str
-    __implicitly_wait_time : int
     __whitelist : list
     __wait : WebDriverWait
     """
 
-    def __init__(self, config_name, username, password, implicitly_wait_time=5, whitelist=None):
+    def __init__(self, config_name, username, password, whitelist=None):
         """
         constructor
 
@@ -45,9 +78,6 @@ class WebRTC:
             login username
         password : str
             login password
-        implicitly_wait_time : int
-            implicitly wait time
-            default: 5
         whitelist : list or None
             white list of incoming call
             default: ['*68'] # wakeup call
@@ -58,12 +88,17 @@ class WebRTC:
         self.__base_url = os.getenv('WEBRTC_BASE_URL')
         self.__username = username
         self.__password = password
-        self.__implicitly_wait_time = implicitly_wait_time
         self.__whitelist = ['*68'] if whitelist is None else whitelist
 
-    def initialize(self):
+    def initialize(self, implicitly_wait_time=5):
         """
         initialize
+
+        Parameters
+        ----------
+        implicitly_wait_time : int
+            implicitly wait time
+            default: 5
         """
         # setup driver
         chrome_option = webdriver.ChromeOptions()
@@ -73,7 +108,7 @@ class WebRTC:
         chrome_option.add_argument('--use-fake-ui-for-media-stream')
         chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
         self.__driver = webdriver.Chrome(options=chrome_option)
-        self.__wait = None
+        self.__wait = WebDriverWait(self.__driver, implicitly_wait_time)
         # output message
         self.__logger.info('Initialization')
 
@@ -135,7 +170,6 @@ class WebRTC:
                     self.__logger.info('{}'.format(soup.h3.text.strip()))
                 # enable phone widget
                 self.__driver.find_element_by_xpath("//a[@data-widget_type_id='phone' and @data-name='Phone']").click()
-                self.__wait = WebDriverWait(self.__driver, self.__implicitly_wait_time)
                 is_running = False
             except Exception as e:
                 wait_time_sec = 3
@@ -173,7 +207,7 @@ class JobWorker(threading.Thread):
     Attributes
     ----------
     __queue : queue.Queue
-    __is_running : boolean
+    __process : ProcessStatus
     """
 
     def __init__(self):
@@ -182,7 +216,7 @@ class JobWorker(threading.Thread):
         """
         super().__init__()
         self.__queue = queue.Queue()
-        self.__is_running = True
+        self.__process = ProcessStatus()
 
     def put(self, job):
         """
@@ -201,53 +235,20 @@ class JobWorker(threading.Thread):
         """
         finish job worker
         """
-        self.__is_running = False
+        self.__process.change_status(15, 'SIGTERM')
 
     def run(self):
         """
         thread function
         """
-        while self.__is_running:
+        while self.__process.get_status():
             try:
                 job = self.__queue.get(block=True, timeout=1)
                 job()
                 self.__queue.task_done()
             except queue.Empty:
                 pass
-
-class ProcessStatus():
-    """
-    Process Status
-    Attributes
-    ----------
-    __status : bool
-        True  : running
-        False : stopped
-    """
-
-    def __init__(self):
-        """
-        constructor
-        """
-        self.__status = True
-
-    def change_status(self, signum, frame):
-        """
-        change status
-        Parameters
-        ----------
-        signum : int
-            signal number
-        frame : str
-            frame information
-        """
-        self.__status = False
-
-    def get_status(self):
-        """
-        get current status
-        """
-        return self.__status
+        self.clear()
 
 if __name__ == '__main__':
     # setup logging configuration
@@ -288,9 +289,9 @@ if __name__ == '__main__':
     }
     # setup webrtc
     implicitly_wait_time = 10
-    webrtc = WebRTC('webrtc', os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'), implicitly_wait_time=implicitly_wait_time-1, whitelist=['001', '99003', '*68'])
+    webrtc = WebRTC('webrtc', os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'), whitelist=['001', '99003', '*68'])
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
-    webrtc.initialize()
+    webrtc.initialize(implicitly_wait_time=implicitly_wait_time-1)
     job_worker = JobWorker()
 
     with DaemonContext(pidfile=pidfile, signal_map=signal_map, working_directory=os.getcwd(), files_preserve=[webrtc.get_stream()]):
