@@ -8,9 +8,14 @@ import signal
 import sys
 import threading
 import time
+import re
 from daemon import DaemonContext
 from lockfile.pidlockfile import PIDLockFile
 from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 class WebRTC:
     """
@@ -23,9 +28,12 @@ class WebRTC:
     __base_url : str
     __username : str
     __password : str
+    __implicitly_wait_time : int
+    __whitelist : list
+    __wait : WebDriverWait
     """
 
-    def __init__(self, config_name, username, password):
+    def __init__(self, config_name, username, password, implicitly_wait_time=5, whitelist=None):
         """
         constructor
 
@@ -37,6 +45,12 @@ class WebRTC:
             login username
         password : str
             login password
+        implicitly_wait_time : int
+            implicitly wait time
+            default: 5
+        whitelist : list or None
+            white list of incoming call
+            default: ['*68'] # wakeup call
         """
         # setup logger
         self.__logger = logging.getLogger(config_name)
@@ -44,6 +58,8 @@ class WebRTC:
         self.__base_url = os.getenv('WEBRTC_BASE_URL')
         self.__username = username
         self.__password = password
+        self.__implicitly_wait_time = implicitly_wait_time
+        self.__whitelist = ['*68'] if whitelist is None else whitelist
 
     def initialize(self):
         """
@@ -53,8 +69,11 @@ class WebRTC:
         chrome_option = webdriver.ChromeOptions()
         chrome_option.add_argument('--headless')
         chrome_option.add_argument('--disable-gpu')
+        chrome_option.add_argument('--use-fake-device-for-media-stream')
+        chrome_option.add_argument('--use-fake-ui-for-media-stream')
         chrome_option.add_argument('--autoplay-policy=no-user-gesture-required')
         self.__driver = webdriver.Chrome(options=chrome_option)
+        self.__wait = None
         # output message
         self.__logger.info('Initialization')
 
@@ -116,6 +135,7 @@ class WebRTC:
                     self.__logger.info('{}'.format(soup.h3.text.strip()))
                 # enable phone widget
                 self.__driver.find_element_by_xpath("//a[@data-widget_type_id='phone' and @data-name='Phone']").click()
+                self.__wait = WebDriverWait(self.__driver, self.__implicitly_wait_time)
                 is_running = False
             except Exception as e:
                 wait_time_sec = 3
@@ -124,6 +144,27 @@ class WebRTC:
                 self.__logger.warning('retry after waiting for {} seconds'.format(wait_time_sec))
                 # retry after several seconds
                 time.sleep(wait_time_sec)
+
+    def chk_specific_incoming_call(self):
+        """
+        check specific incoming call
+        """
+        try:
+            element = self.__driver.find_element_by_xpath("//div[@class='contactImage' and contains(@style,'did')]")
+            button = self.__wait.until(EC.element_to_be_clickable((By.XPATH, "//button[text()='Answer']")))
+            # check specific incoming call
+            if element:
+                attribute_value = element.get_attribute('style')
+                matched = re.search('(?<=did=)[0-9\*]+', attribute_value)
+                # the case of did is contained in white list
+                if matched and matched.group() in self.__whitelist:
+                    button.click()
+        except (NoSuchElementException, TimeoutException):
+            # ignore exception
+            pass
+        except Exception as e:
+            _, _, exc_tb = sys.exc_info()
+            self.__logger.warning('{} (line: {})'.format(e, exc_tb.tb_lineno))
 
 class JobWorker(threading.Thread):
     """
@@ -148,6 +189,13 @@ class JobWorker(threading.Thread):
         put job
         """
         self.__queue.put(job)
+
+    def clear(self):
+        """
+        clear queue
+        """
+        with self.__queue.mutex:
+            self.__queue.queue.clear()
 
     def finish(self):
         """
@@ -239,7 +287,8 @@ if __name__ == '__main__':
         signal.SIGTERM: process_status.change_status
     }
     # setup webrtc
-    webrtc = WebRTC('webrtc', os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'))
+    implicitly_wait_time = 10
+    webrtc = WebRTC('webrtc', os.getenv('WEBRTC_USERNAME'), os.getenv('WEBRTC_PASSWORD'), implicitly_wait_time=implicitly_wait_time-1, whitelist=['001', '99003', '*68'])
     pidfile = PIDLockFile('/var/run/lock/webrtc.pid')
     webrtc.initialize()
     job_worker = JobWorker()
@@ -248,6 +297,8 @@ if __name__ == '__main__':
         # setup schedule
         job_worker.put(webrtc.chk_login_status)
         schedule.every().day.at('00:03').do(job_worker.put, webrtc.chk_login_status)
+        schedule.every().hour.at('00:01').do(job_worker.clear)
+        schedule.every(implicitly_wait_time+1).seconds.do(job_worker.put, webrtc.chk_specific_incoming_call)
         job_worker.start()
 
         # main loop
