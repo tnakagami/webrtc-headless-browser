@@ -155,11 +155,11 @@ class WebRTC:
         check login status
         """
         is_running = True
+        access_url = '{}/index.php?display=dashboard'.format(self.__base_url)
 
         while is_running:
             try:
                 # access dashboard
-                access_url = '{}/index.php?display=dashboard'.format(self.__base_url)
                 self.__driver.get(access_url)
                 soup = bs4.BeautifulSoup(self.__driver.page_source, 'html.parser')
                 # check login status
